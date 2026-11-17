@@ -5,7 +5,7 @@ dithered sleep screens for Xteink e-readers running
 [CrossPoint](https://github.com/crosspoint-reader/crosspoint-reader) firmware.
 All the work happens in your browser, and there is no server.
 
-**[Try it: YOUR-USERNAME.github.io/crosspoint-sleep-screens](https://YOUR-USERNAME.github.io/crosspoint-sleep-screens/)**
+**[Try it: yucahu.github.io/crosspoint-sleep-screens](https://yucahu.github.io/crosspoint-sleep-screens/)**
 
 **Status:** saving to an SD card or a ZIP is in daily use on a reader. Sending over
 Wi-Fi and the reader plugin haven't been tested on a device yet, so treat them as
@@ -50,7 +50,7 @@ You need [Node.js](https://nodejs.org) 18 or newer. There are no dependencies to
 install.
 
 ```bash
-git clone https://github.com/YOUR-USERNAME/crosspoint-sleep-screens.git
+git clone https://github.com/yucahu/crosspoint-sleep-screens.git
 ```
 
 ```bash
