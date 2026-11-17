@@ -1,0 +1,6 @@
+{
+  "title": "CrossPoint Sleep Screens",
+  "description": "Sync images from an Are.na channel into /.sleep as panel-sized dithered BMPs.",
+  "version": "0.1.0",
+  "mount": "settings"
+}

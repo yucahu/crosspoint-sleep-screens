@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CrossPoint Sleep Screens</title>
+  <meta name="description" content="Turn an Are.na channel into dithered sleep screens for Xteink e-readers running CrossPoint. Runs entirely in your browser.">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="masthead">
+    <h1>CrossPoint Sleep Screens</h1>
+    <p>Turn an Are.na channel into sleep screens for your Xteink reader. Everything happens in this browser tab.</p>
+  </header>
+
+  <form id="channel-form" class="channel-row">
+    <label class="grow">
+      <span>Channel URL or slug</span>
+      <input id="channel" type="text" autocomplete="off" spellcheck="false" placeholder="https://are.na/you/your-channel" required>
+    </label>
+    <button id="load" type="submit" class="primary">Load channel</button>
+  </form>
+  <p id="status" class="status" role="status" aria-live="polite"></p>
+
+  <main class="layout">
+    <aside class="controls">
+      <fieldset>
+        <legend>Screen</legend>
+        <label><span>Reader</span><select id="panel"></select></label>
+        <div id="custom-size" class="pair" hidden>
+          <label><span>Width</span><input id="width" type="number" min="100" max="2000" step="1"></label>
+          <label><span>Height</span><input id="height" type="number" min="100" max="2000" step="1"></label>
+        </div>
+        <label><span>Fit</span>
+          <select id="fit">
+            <option value="auto">Auto</option>
+            <option value="cover">Crop to fill</option>
+            <option value="contain">Show whole image</option>
+          </select>
+        </label>
+        <label><span>Depth</span>
+          <select id="bpp">
+            <option value="2">2-bit, four greys</option>
+            <option value="1">1-bit, black and white</option>
+          </select>
+        </label>
+        <label><span>Brightness <output id="gamma-out"></output></span>
+          <input id="gamma" type="range" min="0.5" max="2" step="0.05">
+        </label>
+        <label class="check"><input id="invert" type="checkbox"> Invert</label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Images</legend>
+        <label><span>Order</span>
+          <select id="order">
+            <option value="newest">Newest in channel first</option>
+            <option value="oldest">Oldest in channel first</option>
+            <option value="random">Random</option>
+          </select>
+        </label>
+        <div class="pair">
+          <label><span>How many</span><input id="maxImages" type="number" min="1" max="200" step="1"></label>
+          <label><span>Min. size (px)</span><input id="minSourcePx" type="number" min="0" step="10"></label>
+        </div>
+        <label class="check"><input id="includeLinkThumbs" type="checkbox"> Include link and video thumbnails</label>
+        <label class="check"><input id="includeAttachmentPreviews" type="checkbox"> Include PDF and file previews</label>
+        <label class="check"><input id="allowSvg" type="checkbox"> Include SVGs</label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Access token</legend>
+        <label><span>Only needed for private channels</span>
+          <input id="token" type="password" autocomplete="off" spellcheck="false">
+        </label>
+        <label class="check"><input id="remember" type="checkbox"> Remember in this browser</label>
+        <p class="hint">Sent only to api.are.na. <span id="rate"></span></p>
+      </fieldset>
+    </aside>
+
+    <section class="results">
+      <section id="export" class="export" hidden aria-labelledby="export-summary">
+        <div class="export-head">
+          <h2 id="export-summary"></h2>
+          <p id="export-note" class="hint"></p>
+        </div>
+        <p id="done" class="done" role="status" hidden></p>
+
+        <div class="ways">
+          <div class="way" id="way-card">
+            <h3>Save to SD card</h3>
+            <p>Put the reader's SD card in your computer, click, and choose the card. On an X4 Pro you can use USB Drive mode instead.</p>
+            <button id="write-card" type="button" class="primary">Save to SD card</button>
+          </div>
+          <div class="way">
+            <h3>Download ZIP</h3>
+            <p>Open the ZIP and drag the <code>sleep</code> folder onto your SD card.</p>
+            <button id="download" type="button">Download ZIP</button>
+          </div>
+          <div class="way" id="way-wifi">
+            <h3>Send over Wi-Fi <span class="tag">Experimental</span></h3>
+            <p>Chrome only. On the reader, open File Transfer and join your network, then send. Chrome will ask to allow local network access.</p>
+            <label class="inline"><span>Reader address</span>
+              <input id="reader-host" type="text" autocomplete="off" spellcheck="false" placeholder="crosspoint.local">
+            </label>
+            <button id="send-wifi" type="button">Send to reader</button>
+          </div>
+        </div>
+
+        <div class="where">
+          <div>
+            <h3>Where the files go</h3>
+            <pre class="tree" aria-label="SD card, then a folder named sleep at the top level, containing arena_01.bmp, arena_02.bmp and so on"><span>SD card</span>
+└── sleep
+    ├── arena_01.bmp
+    ├── arena_02.bmp
+    └── …</pre>
+          </div>
+          <ol>
+            <li>The <code>sleep</code> folder sits at the top of the card, next to your books, not inside another folder.</li>
+            <li>On the reader, set <em>Settings → Display → Sleep Screen</em> to <em>Custom</em>.</li>
+            <li>A file named <code>sleep.bmp</code> at the top of the card replaces these, so remove it if you have one.</li>
+          </ol>
+        </div>
+      </section>
+
+      <div id="empty" class="empty">
+        <p>Paste a channel above. You'll see every image as it will look on the reader, and can drop any you don't want before saving.</p>
+      </div>
+      <div id="grid" class="grid"></div>
+
+      <details id="skipped-box" class="skipped" hidden>
+        <summary id="skipped-title"></summary>
+        <ul id="skipped"></ul>
+      </details>
+    </section>
+  </main>
+
+  <script src="../core.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
