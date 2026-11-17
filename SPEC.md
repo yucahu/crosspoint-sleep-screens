@@ -101,8 +101,12 @@ said Appearance.
 (multipart) and `POST /delete` (`paths` as a JSON array). Every request is a simple
 CORS request, so there's no preflight. From an HTTPS page it relies on Chrome's Local
 Network Access exception for `.local` names and private IPs, which needs the user's
-permission. Requests carry `targetAddressSpace: 'local'`. Tested only against a fake
-reader on localhost.
+permission. Requests carry `targetAddressSpace: 'local'`.
+
+Tested on 2026-11-17 from the live GitHub Pages site in Chrome, on an X4 Pro using
+File Transfer → Join a Network and the default `crosspoint.local`: it worked after
+allowing local network access. With a VPN on, it failed with the "couldn't reach"
+message, because the VPN routes the request away from the home network.
 
 ## 4. Output format
 
@@ -205,7 +209,7 @@ The SD writer also refuses to delete any name not matching `arena_NN.bmp`.
 ## 11. Open items
 
 1. Check `/.crosspoint` for new `sleep_*.bmp` files, to confirm the direct draw path.
-1. On the live site: test the `sleep` folder from the ZIP and the card writer, and **Send over Wi-Fi** on a real reader.
+1. Done 2026-11-17: the `sleep` folder from the card writer and the ZIP, and **Send over Wi-Fi** on an X4 Pro.
 2. Add a channel picker from the user's account once token auth is verified.
 3. If sharing widely: register an OAuth app (PKCE) so people can sign in rather than
    paste a token.

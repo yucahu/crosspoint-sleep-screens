@@ -100,7 +100,7 @@
           </div>
           <div class="way" id="way-wifi">
             <h3>Send over Wi-Fi <span class="tag">Experimental</span></h3>
-            <p>Chrome only. On the reader, open File Transfer and join your network, then send. Chrome will ask to allow local network access.</p>
+            <p>Chrome only. Turn off any VPN. On the reader, open File Transfer and join your network, then send. Chrome will ask to allow local network access.</p>
             <label class="inline"><span>Reader address</span>
               <input id="reader-host" type="text" autocomplete="off" spellcheck="false" placeholder="crosspoint.local">
             </label>
@@ -119,6 +119,7 @@
           </div>
           <ol>
             <li>The <code>sleep</code> folder sits at the top of the card, next to your books, not inside another folder.</li>
+            <li>Saving again replaces the images this site added before. Any other images stay, including anything in a <code>.sleep</code> folder, and the reader shows them all. A ZIP can't remove anything, so delete old files by hand.</li>
             <li>On the reader, set <em>Settings → Display → Sleep Screen</em> to <em>Custom</em>.</li>
             <li>A file named <code>sleep.bmp</code> at the top of the card replaces these, so remove it if you have one.</li>
           </ol>

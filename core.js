@@ -419,8 +419,22 @@
 
     var manifest = Object.assign({ at: new Date().toISOString(), files: names }, info || {});
     await put(MANIFEST, new TextEncoder().encode(JSON.stringify(manifest, null, 2)));
-    return { written: names.length, removed: removed };
+
+    // What else the reader will show, so the result can say so plainly.
+    var others = 0, legacy = 0;
+    for await (var entry of sleep.keys()) {
+      if (isBmp(entry) && names.indexOf(entry) === -1) others++;
+    }
+    if (sleep !== dir) {
+      try {
+        var dot = await dir.getDirectoryHandle('.sleep');
+        for await (var e2 of dot.keys()) if (isBmp(e2)) legacy++;
+      } catch (e) { /* no .sleep folder */ }
+    }
+    return { written: names.length, removed: removed, others: others, legacy: legacy };
   }
+
+  function isBmp(name) { return /\.bmp$/i.test(name); }
 
   // --- send to the reader over Wi-Fi ----------------------------------------
   // Uses the reader's own file-transfer endpoints. The reader is plain HTTP, so
@@ -480,7 +494,16 @@
       var del = await call('/delete', form({ paths: JSON.stringify(stale) }));
       if (!del.ok) throw new Error('uploaded, but could not remove old images (HTTP ' + del.status + ')');
     }
-    return { written: names.length, removed: stale.length };
+
+    // What else the reader will show. The web server may refuse to list a dot
+    // folder, in which case legacy stays null (unknown).
+    var others = existing.filter(function (n) { return isBmp(n) && !OWN_FILE.test(n); }).length;
+    var legacy = null;
+    try {
+      var lr = await call('/api/files?path=' + encodeURIComponent('/.sleep'));
+      if (lr.ok) legacy = (await lr.json()).filter(function (f) { return !f.isDirectory && isBmp(f.name); }).length;
+    } catch (e) { /* unknown */ }
+    return { written: names.length, removed: stale.length, others: others, legacy: legacy };
   }
 
   root.SleepScreensCore = {

@@ -44,11 +44,13 @@
     s.textContent = msg || '';
     s.classList.toggle('err', !!isError);
   }
-  function setDone(msg, isError) {
+  // kind: true for an error, 'info' for progress, anything else for success.
+  function setDone(msg, kind) {
     var d = $('done');
     d.hidden = !msg;
     d.textContent = msg || '';
-    d.classList.toggle('err', !!isError);
+    d.classList.toggle('err', kind === true);
+    d.classList.toggle('info', kind === 'info');
   }
   function showRate(r) {
     if (!r.limit) return;
@@ -304,6 +306,17 @@
     setDone('ZIP downloaded. Open it and drag the sleep folder onto your SD card.');
   }
 
+  function plural(n, word) { return n + ' ' + word + (n === 1 ? '' : 's'); }
+
+  // Says what else the reader will show, since only this site's own images are
+  // ever replaced.
+  function leftoverNote(r) {
+    var notes = [];
+    if (r.others) notes.push('The sleep folder also has ' + plural(r.others, 'image') + ' this site didn\'t add, and ' + (r.others === 1 ? 'it stays.' : 'they stay.'));
+    if (r.legacy) notes.push('A .sleep folder has ' + plural(r.legacy, 'more image') + '. The reader shows ' + (r.legacy === 1 ? 'it' : 'those') + ' too, so delete ' + (r.legacy === 1 ? 'it' : 'them') + ' if you only want this set.');
+    return notes.length ? ' ' + notes.join(' ') : '';
+  }
+
   async function writeCard() {
     var dir;
     try {
@@ -316,9 +329,9 @@
     button.disabled = true;
     try {
       var r = await C.writeToDirectory(dir, outputFiles(), { channel: C.parseChannel(cfg.channel) });
-      setDone('Saved ' + r.written + ' image' + (r.written === 1 ? '' : 's') + ' to the sleep folder' +
-        (r.removed ? ' and removed ' + r.removed + ' from last time' : '') +
-        '. Put the card back in the reader and set Sleep Screen to Custom.');
+      setDone('Saved ' + plural(r.written, 'image') + ' to the sleep folder' +
+        (r.removed ? ' and removed ' + r.removed + ' left over from last time' : '') + '.' + leftoverNote(r) +
+        ' Put the card back in the reader and set Sleep Screen to Custom.');
     } catch (e) {
       setDone('Could not save to the card: ' + e.message + '. Download the ZIP instead.', true);
     } finally {
@@ -332,15 +345,17 @@
     setDone('');
     try {
       var r = await C.sendToReader($('reader-host').value, outputFiles(), {
-        onProgress: function (n, total) { setDone('Sending ' + n + ' of ' + total + '…'); }
+        onProgress: function (n, total) { setDone('Sending ' + n + ' of ' + total + '…', 'info'); }
       });
-      setDone('Sent ' + r.written + ' image' + (r.written === 1 ? '' : 's') + ' to the reader' +
-        (r.removed ? ' and removed ' + r.removed + ' from last time' : '') + '. Set Sleep Screen to Custom on the reader.');
+      setDone('Sent ' + plural(r.written, 'image') + ' to the reader' +
+        (r.removed ? ' and removed ' + r.removed + ' left over from last time' : '') + '.' + leftoverNote(r) +
+        ' Set Sleep Screen to Custom on the reader.');
     } catch (e) {
       // A refused permission, a blocked request and an unreachable reader all
-      // look the same to the page: a TypeError with no detail.
+      // look the same to the page: a TypeError with no detail. A VPN is the
+      // most common cause: it routes the request away from your home network.
       setDone(e instanceof TypeError
-        ? 'Couldn\'t reach the reader. Check it\'s on File Transfer, on the same Wi-Fi, and that you allowed local network access. You can also type the address shown on the reader. Otherwise, use the SD card or ZIP.'
+        ? 'Couldn\'t reach the reader. Turn off any VPN, check the reader is on File Transfer and the same Wi-Fi, and allow local network access if Chrome asks. You can also type the address shown on the reader. Otherwise, use the SD card or ZIP.'
         : 'Sending failed: ' + e.message, true);
     } finally {
       button.disabled = false;

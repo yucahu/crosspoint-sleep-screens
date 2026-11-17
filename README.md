@@ -8,8 +8,9 @@ All the work happens in your browser, and there is no server.
 **[Try it: yucahu.github.io/crosspoint-sleep-screens](https://yucahu.github.io/crosspoint-sleep-screens/)**
 
 **Status:** saving to an SD card or a ZIP is in daily use on a reader. Sending over
-Wi-Fi and the reader plugin haven't been tested on a device yet, so treat them as
-experimental.
+Wi-Fi worked on an X4 Pro from the live site in Chrome, but has only been tried a few
+times, so it's still marked experimental. The reader plugin hasn't been tested on a
+device yet.
 
 ## How to use it
 
@@ -20,8 +21,9 @@ experimental.
      and choose the card. On an X4 Pro, USB Drive mode works too.
    - **Download ZIP** (any browser): open it and drag the `sleep` folder onto the
      card.
-   - **Send over Wi-Fi** (Chrome, experimental): start File Transfer on the reader,
-     then click send and allow local network access when Chrome asks.
+   - **Send over Wi-Fi** (Chrome, experimental): turn off any VPN, start File
+     Transfer on the reader, then click send and allow local network access when
+     Chrome asks.
 4. On the reader, set **Settings → Display → Sleep Screen** to **Custom**.
 
 The files go in a folder named `sleep` at the top of the card:
@@ -108,8 +110,10 @@ Checkboxes let the link, file-preview and SVG groups back in.
 
 **Save to SD card**, **Send over Wi-Fi** and the plugin all remove the images they
 added last time, then add the new set. Images you added to the folder yourself are
-left alone. A ZIP can't remove anything, so if the new set is smaller, delete the old
-`arena_*.bmp` files first.
+left alone, and so is anything in a `.sleep` folder. The reader shows all of them, and
+the app tells you after each save how many other images are still there. A ZIP can't
+remove anything, so if the new set is smaller, delete the old `arena_*.bmp` files
+first.
 
 Keep the count low. The reader checks every image in the folder each time it sleeps,
 so a few dozen is comfortable and hundreds will be slower. The default is 24.
