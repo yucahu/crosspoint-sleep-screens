@@ -45,10 +45,7 @@
             <option value="1">1-bit, black and white</option>
           </select>
         </label>
-        <label><span>Brightness <output id="gamma-out"></output></span>
-          <input id="gamma" type="range" min="0.5" max="2" step="0.05">
-        </label>
-        <label class="check"><input id="invert" type="checkbox"> Invert</label>
+        <p class="hint">Fit sets where each image starts. Click an image to crop it, move it, invert it, or change its brightness and background.</p>
       </fieldset>
 
       <fieldset>
@@ -127,7 +124,7 @@
       </section>
 
       <div id="empty" class="empty">
-        <p>Paste a channel above. You'll see every image as it will look on the reader, and can drop any you don't want before saving.</p>
+        <p>Paste a channel above. You'll see every image as it will look on the reader. Click one to adjust it, or drop any you don't want before saving.</p>
       </div>
       <div id="grid" class="grid"></div>
 
@@ -137,6 +134,59 @@
       </details>
     </section>
   </main>
+
+  <dialog id="editor" class="editor" aria-labelledby="ed-title">
+    <div class="ed-head">
+      <h2 id="ed-title"></h2>
+      <div class="ed-nav">
+        <button id="ed-prev" type="button" aria-label="Previous image">&lsaquo; Prev</button>
+        <button id="ed-next" type="button" aria-label="Next image">Next &rsaquo;</button>
+        <button id="ed-done" type="button" class="primary">Done</button>
+      </div>
+    </div>
+    <div class="ed-body">
+      <section class="ed-pane">
+        <h3>Crop</h3>
+        <p class="hint">Drag the corners or edges to crop. Drag inside the box to move it.</p>
+        <div id="ed-crop" class="ed-crop">
+          <canvas id="ed-source"></canvas>
+          <div id="ed-cropbox" class="cropbox" tabindex="0" role="group" aria-label="Crop area. Arrow keys move it, Shift with arrow keys resizes it.">
+            <span data-h="nw"></span><span data-h="n"></span><span data-h="ne"></span>
+            <span data-h="w"></span><span data-h="e"></span>
+            <span data-h="sw"></span><span data-h="s"></span><span data-h="se"></span>
+          </div>
+        </div>
+      </section>
+      <section class="ed-pane">
+        <h3>Screen</h3>
+        <p class="hint">Drag the image to move it. Scroll or use Size to resize it.</p>
+        <div id="ed-screen" class="ed-screen" tabindex="0" aria-label="Screen preview. Arrow keys move the image.">
+          <canvas id="ed-preview"></canvas>
+          <div id="ed-placebox" class="placebox" aria-hidden="true"></div>
+        </div>
+      </section>
+      <section class="ed-controls">
+        <label><span>Size <output id="ed-scale-out"></output></span>
+          <input id="ed-scale" type="range" min="0.1" max="4" step="0.01">
+        </label>
+        <div class="ed-buttons">
+          <button id="ed-fill" type="button">Fill screen</button>
+          <button id="ed-fit" type="button">Fit whole</button>
+          <button id="ed-center" type="button">Center</button>
+        </div>
+        <fieldset class="ed-bg">
+          <legend>Background</legend>
+          <label class="check"><input type="radio" name="ed-bg" value="white"> White</label>
+          <label class="check"><input type="radio" name="ed-bg" value="black"> Black</label>
+        </fieldset>
+        <label class="check"><input id="ed-invert" type="checkbox"> Invert image</label>
+        <label><span>Brightness <output id="ed-gamma-out"></output></span>
+          <input id="ed-gamma" type="range" min="0.5" max="2" step="0.05">
+        </label>
+        <button id="ed-reset" type="button">Reset this image</button>
+      </section>
+    </div>
+  </dialog>
 
   <script src="../core.js"></script>
   <script src="app.js"></script>

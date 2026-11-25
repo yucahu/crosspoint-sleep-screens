@@ -15,7 +15,9 @@ device yet.
 ## How to use it
 
 1. Open the app and paste a public Are.na channel URL.
-2. Remove any images you don't want.
+2. Remove any images you don't want. Click an image to crop it, move or resize it on
+   the screen, invert it, change its brightness, or give it a black or white
+   background. Edits last until you close the page.
 3. Get them onto the reader's SD card, using any of these:
    - **Save to SD card** (Chrome or Edge): put the card in your computer, click,
      and choose the card. On an X4 Pro, USB Drive mode works too.
