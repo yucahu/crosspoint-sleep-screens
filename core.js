@@ -242,6 +242,69 @@
     return { gray: toGray(g.getImageData(0, 0, w, h).data, cfg), fit: pos.fit };
   }
 
+  // --- per-image edits (web app) -------------------------------------------
+  // Each screen is a fixed w x h canvas filled with `bg`, with the image on top.
+  //   crop:   the part of the source used, as fractions of its width and height
+  //   dest:   where the cropped image sits, as fractions of the screen: x, y of
+  //           its top-left corner and w of its width. Its height follows from the
+  //           crop's shape, so it is never stretched. null means "place it by
+  //           the Fit setting", until the image is moved or resized by hand.
+  //   bg:     'white' or 'black'
+  //   invert: inverts the image only, never the background
+  //   gamma:  brightness of the image, 1 is neutral, higher is lighter
+  function defaultEdit() {
+    return { crop: { x: 0, y: 0, w: 1, h: 1 }, dest: null, bg: 'white', invert: false, gamma: 1 };
+  }
+
+  // Source rectangle (pixels) and screen rectangle (pixels) for an edit.
+  function layout(sw, sh, w, h, edit, fit) {
+    var c = edit.crop;
+    var sx = c.x * sw, sy = c.y * sh, cw = c.w * sw, ch = c.h * sh;
+    var d = edit.dest, dx, dy, dw, dh, f = 'custom';
+    if (d) {
+      dw = d.w * w; dh = dw * ch / cw; dx = d.x * w; dy = d.y * h;
+    } else {
+      var p = placement(cw, ch, w, h, fit);
+      dx = p.x; dy = p.y; dw = p.w; dh = p.h; f = p.fit;
+    }
+    return { sx: sx, sy: sy, sw: cw, sh: ch, dx: dx, dy: dy, dw: dw, dh: dh, fit: f };
+  }
+
+  // Greys from RGBA drawn on a transparent canvas: inverts and brightens the
+  // image, then lays it over the background by its alpha. Pure, so testable.
+  function composeGray(rgba, edit) {
+    var n = rgba.length / 4, gray = new Float32Array(n);
+    var bg = edit.bg === 'black' ? 0 : 255;
+    var gamma = Number(edit.gamma) || 1, table = null;
+    if (gamma !== 1) {
+      table = new Float32Array(256);
+      for (var t = 0; t < 256; t++) table[t] = 255 * Math.pow(t / 255, 1 / gamma);
+    }
+    for (var i = 0, p = 0; i < n; i++, p += 4) {
+      var a = rgba[p + 3] / 255;
+      if (a === 0) { gray[i] = bg; continue; }
+      var v = 0.299 * rgba[p] + 0.587 * rgba[p + 1] + 0.114 * rgba[p + 2];
+      if (edit.invert) v = 255 - v;
+      if (table) v = table[Math.round(v)];
+      gray[i] = a * v + (1 - a) * bg;
+    }
+    return gray;
+  }
+
+  // Browser only. `source` is an ImageBitmap.
+  function compose(source, w, h, edit, fit) {
+    var c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    var g = c.getContext('2d', { willReadFrequently: true });
+    g.imageSmoothingEnabled = true;
+    g.imageSmoothingQuality = 'high';
+    var L = layout(source.width, source.height, w, h, edit, fit);
+    if (L.sw > 0 && L.sh > 0 && L.dw > 0 && L.dh > 0) {
+      g.drawImage(source, L.sx, L.sy, L.sw, L.sh, L.dx, L.dy, L.dw, L.dh);
+    }
+    return { gray: composeGray(g.getImageData(0, 0, w, h).data, edit), fit: L.fit };
+  }
+
   // Atkinson: 1/8 of the error to six neighbours, the rest discarded. The same
   // family the firmware's converters use (USE_ATKINSON). Modifies `gray`.
   function dither(gray, w, h, levels) {
@@ -512,6 +575,7 @@
     parseChannel: parseChannel, fetchChannel: fetchChannel, classify: classify,
     selectBlocks: selectBlocks, sortFor: sortFor, panelSize: panelSize,
     resolveFit: resolveFit, placement: placement, toGray: toGray, rasterize: rasterize,
+    defaultEdit: defaultEdit, layout: layout, composeGray: composeGray, compose: compose,
     dither: dither, encodeBmp: encodeBmp, fileName: fileName, b64: b64,
     crc32: crc32, makeZip: makeZip, writeToDirectory: writeToDirectory
   };

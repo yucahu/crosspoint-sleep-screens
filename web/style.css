@@ -163,6 +163,9 @@ legend { padding: 0 0 10px; font-weight: 600; }
   border: 1px solid var(--line);
   border-radius: 3px;
 }
+/* The whole screen is the button that opens the editor. */
+.card .open { display: block; width: 100%; min-height: 0; padding: 0; border: 0; background: none; cursor: zoom-in; }
+.card.edited .screen { border-color: var(--ink); }
 .card figcaption { margin-top: 5px; font-size: 12px; line-height: 1.35; color: var(--muted); overflow-wrap: anywhere; }
 .card.failed .screen { opacity: 0.35; }
 .card.failed figcaption { color: var(--danger); }
@@ -189,6 +192,78 @@ summary { cursor: pointer; font-weight: 500; min-height: 24px; }
 .skipped li span { color: var(--muted); }
 code { font: 13px ui-monospace, Menlo, Consolas, monospace; }
 
+/* --- editor --- */
+.editor {
+  width: min(1100px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+}
+.editor::backdrop { background: rgba(20, 19, 17, 0.55); }
+.ed-head { position: sticky; top: 0; z-index: 2; display: flex; gap: 12px; align-items: center; justify-content: space-between; padding: 12px 16px; background: var(--surface); border-bottom: 1px solid var(--line); }
+.ed-head h2 { margin: 0; font-size: 16px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ed-nav { display: flex; gap: 8px; flex-shrink: 0; }
+.ed-body { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) 230px; gap: 20px; padding: 16px; align-items: start; }
+.ed-pane h3 { margin: 0; font-size: 14px; }
+.ed-pane .hint { margin: 2px 0 10px; }
+.ed-controls fieldset { margin: 4px 0 12px; }
+.ed-controls legend { padding-bottom: 6px; font-size: 13px; font-weight: 500; color: var(--muted); }
+.ed-buttons { display: flex; flex-wrap: wrap; gap: 6px; margin: -4px 0 16px; }
+.ed-buttons button { min-height: 34px; padding: 4px 10px; font-size: 13px; }
+
+/* Checkerboard behind the source, so transparent parts show. */
+.ed-crop {
+  position: relative;
+  width: min(100%, calc(62vh * var(--ar, 1)));
+  aspect-ratio: var(--ar, 1);
+  margin: 0 auto;
+  background: repeating-conic-gradient(#d9d6cd 0% 25%, #efede7 0% 50%) 0 0 / 16px 16px;
+  touch-action: none;
+  user-select: none;
+  overflow: hidden;
+}
+.ed-crop canvas { display: block; width: 100%; height: 100%; }
+.cropbox {
+  position: absolute;
+  box-shadow: 0 0 0 9999px rgba(20, 19, 17, 0.55);
+  outline: 2px solid #fff;
+  cursor: move;
+  touch-action: none;
+}
+.cropbox span { position: absolute; width: 24px; height: 24px; }
+.cropbox span::after { content: ""; position: absolute; inset: 7px; background: #fff; border: 1px solid #1c1b18; }
+/* Handles sit just inside the box, so they stay reachable at the image's edges. */
+.cropbox [data-h="nw"] { left: -5px; top: -5px; cursor: nwse-resize; }
+.cropbox [data-h="n"]  { left: calc(50% - 12px); top: -5px; cursor: ns-resize; }
+.cropbox [data-h="ne"] { right: -5px; top: -5px; cursor: nesw-resize; }
+.cropbox [data-h="w"]  { left: -5px; top: calc(50% - 12px); cursor: ew-resize; }
+.cropbox [data-h="e"]  { right: -5px; top: calc(50% - 12px); cursor: ew-resize; }
+.cropbox [data-h="sw"] { left: -5px; bottom: -5px; cursor: nesw-resize; }
+.cropbox [data-h="s"]  { left: calc(50% - 12px); bottom: -5px; cursor: ns-resize; }
+.cropbox [data-h="se"] { right: -5px; bottom: -5px; cursor: nwse-resize; }
+
+.ed-screen {
+  position: relative;
+  width: min(100%, 340px, calc(62vh * var(--ar, 0.6)));
+  aspect-ratio: var(--ar, 0.6);
+  margin: 0 auto;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.ed-screen:active { cursor: grabbing; }
+.ed-screen canvas { display: block; width: 100%; height: 100%; }
+.placebox { position: absolute; outline: 1px dashed #e0531f; pointer-events: none; }
+
+@media (max-width: 960px) {
+  .ed-body { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .ed-controls { grid-column: 1 / -1; }
+}
 @media (max-width: 760px) {
   body { padding: 20px 16px 48px; }
   .channel-row { flex-direction: column; align-items: stretch; }
@@ -197,4 +272,8 @@ code { font: 13px ui-monospace, Menlo, Consolas, monospace; }
   .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .way button { align-self: stretch; }
   .where { grid-template-columns: 1fr; }
+  .editor { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0; border: 0; border-radius: 0; }
+  .ed-head { flex-wrap: wrap; }
+  .ed-body { grid-template-columns: 1fr; }
+  .ed-nav button { min-height: 36px; padding: 4px 12px; }
 }

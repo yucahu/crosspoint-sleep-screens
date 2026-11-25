@@ -168,6 +168,13 @@ Live result for `real-3bs49wxggr4`, 77 blocks: 61 kept; 16 skipped, being
 the whole image on white. This matters because the screen is portrait and many
 images are wide: 19 of the first 24 in the test channel use the whole-image path.
 
+Fit only sets where an image starts. In the web app each image can be edited
+(`defaultEdit`, `layout`, `compose` in `core.js`): the screen is a fixed canvas
+filled black or white, and the image sits on top, cropped to any rectangle and
+placed and sized freely without stretching. Invert and brightness apply to the image
+only, never the background, and transparent pixels show the background. Edits are
+kept in memory only. The reader plugin still uses the global `rasterize()` settings.
+
 ## 8. Replacing images
 
 Each writer records what it wrote and deletes only those names: the plugin in

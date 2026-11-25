@@ -18,6 +18,11 @@
     selection: { kept: [], skipped: [] },
     dropped: {},         // block id -> true, removed by hand this session
     results: [],         // { item, name, bytes } per rendered image, in order
+    items: [],           // the images on screen, in order
+    cards: [],           // { fig, canvas, cap } per image
+    edits: {},           // block id -> edit made in the editor; kept for this page only
+    editsSlug: '',       // the channel those edits belong to
+    rendering: false,
     generation: 0        // bumped to abandon a render in progress
   };
   var bitmaps = new Map();   // url -> Promise<ImageBitmap>
@@ -58,7 +63,7 @@
   }
 
   // --- controls ---------------------------------------------------------------
-  var RENDER_KEYS = ['panel', 'width', 'height', 'fit', 'bpp', 'gamma', 'invert'];
+  var RENDER_KEYS = ['panel', 'width', 'height', 'fit', 'bpp'];
   var SELECT_KEYS = ['maxImages', 'minSourcePx', 'includeLinkThumbs', 'includeAttachmentPreviews', 'allowSvg'];
 
   function initControls() {
@@ -81,7 +86,6 @@
         syncControls();
         if (!state.blocks) return;
         if (k === 'order') loadChannel();
-        else if (k === 'gamma') renderSoon();
         else if (SELECT_KEYS.indexOf(k) !== -1) { reselect(); render(); }
         else render();
       });
@@ -107,8 +111,10 @@
 
   function syncControls() {
     $('custom-size').hidden = cfg.panel !== 'CUSTOM';
-    var g = Number(cfg.gamma);
-    $('gamma-out').textContent = g === 1 ? '(neutral)' : g > 1 ? '(lighter, ' + g.toFixed(2) + ')' : '(darker, ' + g.toFixed(2) + ')';
+  }
+
+  function brightnessText(g) {
+    return g === 1 ? '(neutral)' : g > 1 ? '(lighter, ' + g.toFixed(2) + ')' : '(darker, ' + g.toFixed(2) + ')';
   }
 
   // --- load -------------------------------------------------------------------
@@ -134,6 +140,7 @@
       state.blocks = res.blocks;
       state.channelTitle = res.channel.title || slug;
       state.dropped = {};
+      if (slug !== state.editsSlug) { state.edits = {}; state.editsSlug = slug; }
       reselect();
       await render();
     } catch (e) {
@@ -196,32 +203,33 @@
     g.putImageData(img, 0, 0);
   }
 
-  var renderTimer = null;
-  function renderSoon() {
-    clearTimeout(renderTimer);
-    renderTimer = setTimeout(render, 200);
-  }
+  function editFor(item) { return state.edits[item.id] || C.defaultEdit(); }
 
   async function render() {
     var gen = ++state.generation;
     var items = activeItems();
     var size = C.panelSize(cfg);
-    var bpp = Number(cfg.bpp) === 1 ? 1 : 2;
 
+    state.items = items;
     state.results = items.map(function (item) { return { item: item, name: null, bytes: null }; });
+    state.rendering = true;
     setDone('');
     $('empty').hidden = true;
     updateExport(true);
 
     // One placeholder per image, so the grid keeps its shape while it fills.
-    var cards = items.map(function (item) {
+    state.cards = items.map(function (item, idx) {
       var fig = document.createElement('figure');
       fig.className = 'card';
+      var open = document.createElement('button');
+      open.type = 'button';
+      open.className = 'open';
+      open.setAttribute('aria-label', 'Edit ' + item.label);
+      open.addEventListener('click', function () { openEditor(idx); });
       var canvas = document.createElement('canvas');
       canvas.className = 'screen';
       canvas.width = size.w; canvas.height = size.h;
-      canvas.setAttribute('role', 'img');
-      canvas.setAttribute('aria-label', item.label);
+      open.appendChild(canvas);
       var cap = document.createElement('figcaption');
       cap.textContent = item.label;
       var drop = document.createElement('button');
@@ -233,34 +241,23 @@
         state.dropped[item.id] = true;
         render();
       });
-      fig.append(canvas, drop, cap);
+      fig.append(open, drop, cap);
       return { fig: fig, canvas: canvas, cap: cap };
     });
-    $('grid').replaceChildren.apply($('grid'), cards.map(function (c) { return c.fig; }));
+    $('grid').replaceChildren.apply($('grid'), state.cards.map(function (c) { return c.fig; }));
 
     var skippedCount = state.selection.skipped.length;
     var title = state.channelTitle;
     if (!items.length) {
       setStatus(title + ': no usable images' + (skippedCount ? ' (' + skippedCount + ' skipped).' : '.'), true);
+      state.rendering = false;
       updateExport(false);
       return;
     }
 
     for (var i = 0; i < items.length; i++) {
       setStatus(title + ': rendering ' + (i + 1) + ' of ' + items.length + '…');
-      try {
-        var bmp = await getBitmap(items[i].url);
-        if (gen !== state.generation) return;
-        var r = C.rasterize(bmp, size.w, size.h, cfg);
-        var levels = C.dither(r.gray, size.w, size.h, bpp === 1 ? 2 : 4);
-        drawLevels(cards[i].canvas, levels, size.w, size.h, bpp);
-        state.results[i].bytes = C.encodeBmp(levels, size.w, size.h, bpp);
-        cards[i].cap.textContent = items[i].label + (r.fit === 'contain' ? ' · whole image' : '');
-      } catch (e) {
-        if (gen !== state.generation) return;
-        cards[i].fig.classList.add('failed');
-        cards[i].cap.textContent = items[i].label + ': could not load this image, so it will be left out';
-      }
+      await renderCard(i, gen);
       // Yield so the page stays responsive and a newer render can take over.
       await new Promise(function (res) { setTimeout(res, 0); });
       if (gen !== state.generation) return;
@@ -271,7 +268,258 @@
       (failed ? ', ' + failed + ' failed' : '') +
       (state.selection.kept.length > items.length ? ', ' + (state.selection.kept.length - items.length) + ' more available' : '') +
       (skippedCount ? ', ' + skippedCount + ' skipped.' : '.'));
+    state.rendering = false;
     updateExport(false);
+  }
+
+  // Renders one image into its card and its BMP. Also used after editing.
+  async function renderCard(i, gen) {
+    var item = state.items[i], card = state.cards[i];
+    var size = C.panelSize(cfg);
+    var bpp = Number(cfg.bpp) === 1 ? 1 : 2;
+    try {
+      var bmp = await getBitmap(item.url);
+      if (gen !== state.generation) return;
+      var r = C.compose(bmp, size.w, size.h, editFor(item), cfg.fit);
+      var levels = C.dither(r.gray, size.w, size.h, bpp === 1 ? 2 : 4);
+      drawLevels(card.canvas, levels, size.w, size.h, bpp);
+      state.results[i].bytes = C.encodeBmp(levels, size.w, size.h, bpp);
+      card.fig.classList.remove('failed');
+      card.fig.classList.toggle('edited', !!state.edits[item.id]);
+      card.cap.textContent = item.label + (state.edits[item.id] ? ' · edited' : r.fit === 'contain' ? ' · whole image' : '');
+    } catch (e) {
+      if (gen !== state.generation) return;
+      state.results[i].bytes = null;
+      card.fig.classList.add('failed');
+      card.cap.textContent = item.label + ': could not load this image, so it will be left out';
+    }
+  }
+
+  // --- editor ------------------------------------------------------------------
+  // Works on a copy of the image's edit, and stores it in state.edits as soon as
+  // anything changes. The card is re-rendered when the editor closes.
+  var ed = { index: -1, item: null, bmp: null, edit: null, size: null, frame: 0, drag: null };
+
+  function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
+  function copyEdit(e) {
+    return { crop: Object.assign({}, e.crop), dest: e.dest ? Object.assign({}, e.dest) : null, bg: e.bg, invert: e.invert, gamma: e.gamma };
+  }
+  function edLayout() { return C.layout(ed.bmp.width, ed.bmp.height, ed.size.w, ed.size.h, ed.edit, cfg.fit); }
+  function commit() { state.edits[ed.item.id] = ed.edit; drawEditorSoon(); }
+
+  // Pins the image where Fit put it, so moving or cropping starts from there.
+  function ensureDest() {
+    if (ed.edit.dest) return;
+    var L = edLayout();
+    ed.edit.dest = { x: L.dx / ed.size.w, y: L.dy / ed.size.h, w: L.dw / ed.size.w };
+  }
+  // Keeps at least a sliver of the image on screen, so it can't be lost.
+  function clampDest() {
+    var d = ed.edit.dest, W = ed.size.w, H = ed.size.h, L = edLayout(), m = 8;
+    d.x = clamp(d.x * W, m - L.dw, W - m) / W;
+    d.y = clamp(d.y * H, m - L.dh, H - m) / H;
+  }
+  // Width of the cropped image when it just fits the screen: Size 1.
+  function containWidth() {
+    var L = edLayout();
+    return L.sw * Math.min(ed.size.w / L.sw, ed.size.h / L.sh);
+  }
+  function currentScale() { return edLayout().dw / containWidth(); }
+  // Resizes about the image's centre, or puts it in the screen's centre.
+  function setScale(s, recenter) {
+    ensureDest();
+    var L = edLayout(), W = ed.size.w, H = ed.size.h;
+    var cx = recenter ? W / 2 : L.dx + L.dw / 2, cy = recenter ? H / 2 : L.dy + L.dh / 2;
+    var dw = clamp(s, 0.1, 4) * containWidth(), dh = dw * L.sh / L.sw;
+    ed.edit.dest = { x: (cx - dw / 2) / W, y: (cy - dh / 2) / H, w: dw / W };
+    clampDest();
+    commit();
+  }
+
+  async function openEditor(i) {
+    var item = state.items[i];
+    if (!item) return;
+    var bmp;
+    try { bmp = await getBitmap(item.url); } catch (e) { return; }
+    ed.index = i; ed.item = item; ed.bmp = bmp;
+    ed.size = C.panelSize(cfg);
+    ed.edit = copyEdit(editFor(item));
+
+    // The crop view only needs to be screen-sharp, so large sources are shrunk.
+    var src = $('ed-source'), k = Math.min(1, 1400 / Math.max(bmp.width, bmp.height));
+    src.width = Math.max(1, Math.round(bmp.width * k));
+    src.height = Math.max(1, Math.round(bmp.height * k));
+    src.getContext('2d').drawImage(bmp, 0, 0, src.width, src.height);
+    $('ed-crop').style.setProperty('--ar', String(bmp.width / bmp.height));
+    $('ed-screen').style.setProperty('--ar', String(ed.size.w / ed.size.h));
+    $('ed-preview').width = ed.size.w;
+    $('ed-preview').height = ed.size.h;
+
+    $('ed-title').textContent = item.label;
+    $('ed-prev').disabled = i === 0;
+    $('ed-next').disabled = i === state.items.length - 1;
+    drawEditor();
+    if (!$('editor').open) $('editor').showModal();
+  }
+
+  function leaveImage() {
+    if (ed.index >= 0 && state.items[ed.index] === ed.item) {
+      var i = ed.index;
+      renderCard(i, state.generation).then(function () { if (!state.rendering) updateExport(false); });
+    }
+  }
+
+  function drawEditorSoon() {
+    if (ed.frame) return;
+    ed.frame = requestAnimationFrame(function () { ed.frame = 0; drawEditor(); });
+  }
+
+  function drawEditor() {
+    if (!ed.bmp) return;
+    var W = ed.size.w, H = ed.size.h, e = ed.edit;
+    var bpp = Number(cfg.bpp) === 1 ? 1 : 2;
+    var r = C.compose(ed.bmp, W, H, e, cfg.fit);
+    drawLevels($('ed-preview'), C.dither(r.gray, W, H, bpp === 1 ? 2 : 4), W, H, bpp);
+
+    var box = $('ed-cropbox').style, c = e.crop;
+    box.left = c.x * 100 + '%'; box.top = c.y * 100 + '%';
+    box.width = c.w * 100 + '%'; box.height = c.h * 100 + '%';
+
+    var L = edLayout(), pb = $('ed-placebox').style;
+    pb.left = L.dx / W * 100 + '%'; pb.top = L.dy / H * 100 + '%';
+    pb.width = L.dw / W * 100 + '%'; pb.height = L.dh / H * 100 + '%';
+
+    var s = currentScale();
+    $('ed-scale').value = String(s);
+    $('ed-scale-out').textContent = '(' + Math.round(s * 100) + '%)';
+    document.querySelectorAll('input[name="ed-bg"]').forEach(function (n) { n.checked = n.value === e.bg; });
+    $('ed-invert').checked = !!e.invert;
+    $('ed-gamma').value = String(e.gamma);
+    $('ed-gamma-out').textContent = brightnessText(Number(e.gamma));
+  }
+
+  // Crop handles. Resizing trims the image where it stands on the screen;
+  // dragging the box pans the image inside its frame.
+  function cropFrom(start, h, dx, dy) {
+    var c = Object.assign({}, start), min = 0.02;
+    if (h === 'move') {
+      c.x = clamp(c.x + dx, 0, 1 - c.w);
+      c.y = clamp(c.y + dy, 0, 1 - c.h);
+      return c;
+    }
+    if (h.indexOf('w') !== -1) { var nx = clamp(c.x + dx, 0, c.x + c.w - min); c.w += c.x - nx; c.x = nx; }
+    if (h.indexOf('e') !== -1) c.w = clamp(c.w + dx, min, 1 - c.x);
+    if (h.indexOf('n') !== -1) { var ny = clamp(c.y + dy, 0, c.y + c.h - min); c.h += c.y - ny; c.y = ny; }
+    if (h.indexOf('s') !== -1) c.h = clamp(c.h + dy, min, 1 - c.y);
+    return c;
+  }
+
+  function applyCrop(start, c, h) {
+    ed.edit.crop = c;
+    var d = start.dest;
+    if (h === 'move') {
+      ed.edit.dest = Object.assign({}, d);
+    } else {
+      // Screen pixels per source pixel stays the same, so the kept part of the
+      // image doesn't move or change size.
+      var k = start.k, sw = ed.bmp.width, sh = ed.bmp.height, W = ed.size.w, H = ed.size.h;
+      ed.edit.dest = {
+        x: d.x + (c.x - start.crop.x) * sw * k / W,
+        y: d.y + (c.y - start.crop.y) * sh * k / H,
+        w: c.w * sw * k / W
+      };
+    }
+    commit();
+  }
+
+  function cropStart() {
+    ensureDest();
+    var L = edLayout();
+    return { crop: Object.assign({}, ed.edit.crop), dest: Object.assign({}, ed.edit.dest), k: L.dw / L.sw };
+  }
+
+  function initEditor() {
+    var dlg = $('editor'), cropbox = $('ed-cropbox'), screen = $('ed-screen');
+
+    cropbox.addEventListener('pointerdown', function (ev) {
+      ev.preventDefault();
+      cropbox.setPointerCapture(ev.pointerId);
+      ed.drag = { kind: 'crop', h: ev.target.dataset.h || 'move', x: ev.clientX, y: ev.clientY, start: cropStart() };
+    });
+    cropbox.addEventListener('pointermove', function (ev) {
+      var d = ed.drag;
+      if (!d || d.kind !== 'crop') return;
+      var rect = $('ed-crop').getBoundingClientRect();
+      var c = cropFrom(d.start.crop, d.h, (ev.clientX - d.x) / rect.width, (ev.clientY - d.y) / rect.height);
+      applyCrop(d.start, c, d.h);
+    });
+    cropbox.addEventListener('keydown', function (ev) {
+      var keys = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[ev.key];
+      if (!keys) return;
+      ev.preventDefault();
+      var start = cropStart(), h = ev.shiftKey ? 'se' : 'move';
+      applyCrop(start, cropFrom(start.crop, h, keys[0] * 0.01, keys[1] * 0.01), h);
+    });
+
+    screen.addEventListener('pointerdown', function (ev) {
+      ev.preventDefault();
+      screen.setPointerCapture(ev.pointerId);
+      ensureDest();
+      ed.drag = { kind: 'move', x: ev.clientX, y: ev.clientY, dest: Object.assign({}, ed.edit.dest) };
+    });
+    screen.addEventListener('pointermove', function (ev) {
+      var d = ed.drag;
+      if (!d || d.kind !== 'move') return;
+      var rect = screen.getBoundingClientRect();
+      ed.edit.dest = { x: d.dest.x + (ev.clientX - d.x) / rect.width, y: d.dest.y + (ev.clientY - d.y) / rect.height, w: d.dest.w };
+      clampDest();
+      commit();
+    });
+    screen.addEventListener('wheel', function (ev) {
+      ev.preventDefault();
+      setScale(currentScale() * Math.exp(-ev.deltaY * 0.0015));
+    }, { passive: false });
+    screen.addEventListener('keydown', function (ev) {
+      var keys = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[ev.key];
+      if (!keys) return;
+      ev.preventDefault();
+      ensureDest();
+      var step = ev.shiftKey ? 20 : 4;
+      ed.edit.dest.x += keys[0] * step / ed.size.w;
+      ed.edit.dest.y += keys[1] * step / ed.size.h;
+      clampDest();
+      commit();
+    });
+    ['pointerup', 'pointercancel'].forEach(function (t) {
+      cropbox.addEventListener(t, function () { ed.drag = null; });
+      screen.addEventListener(t, function () { ed.drag = null; });
+    });
+
+    $('ed-scale').addEventListener('input', function () { setScale(Number($('ed-scale').value)); });
+    $('ed-fit').addEventListener('click', function () { setScale(1, true); });
+    $('ed-fill').addEventListener('click', function () {
+      var L = edLayout();
+      setScale(Math.max(ed.size.w / L.sw, ed.size.h / L.sh) * L.sw / containWidth(), true);
+    });
+    $('ed-center').addEventListener('click', function () { setScale(currentScale(), true); });
+    document.querySelectorAll('input[name="ed-bg"]').forEach(function (n) {
+      n.addEventListener('change', function () { ed.edit.bg = n.value; commit(); });
+    });
+    $('ed-invert').addEventListener('change', function () { ed.edit.invert = $('ed-invert').checked; commit(); });
+    $('ed-gamma').addEventListener('input', function () { ed.edit.gamma = Number($('ed-gamma').value); commit(); });
+    $('ed-reset').addEventListener('click', function () {
+      delete state.edits[ed.item.id];
+      ed.edit = C.defaultEdit();
+      drawEditor();
+    });
+
+    $('ed-prev').addEventListener('click', function () { leaveImage(); openEditor(ed.index - 1); });
+    $('ed-next').addEventListener('click', function () { leaveImage(); openEditor(ed.index + 1); });
+    $('ed-done').addEventListener('click', function () { dlg.close(); });
+    // Esc and Done both end here.
+    dlg.addEventListener('close', function () { leaveImage(); ed.bmp = null; ed.index = -1; ed.item = null; });
+    // A click on the backdrop closes it too.
+    dlg.addEventListener('click', function (ev) { if (ev.target === dlg) dlg.close(); });
   }
 
   function outputFiles() {
@@ -364,6 +612,7 @@
 
   // --- start -------------------------------------------------------------------
   initControls();
+  initEditor();
   $('channel-form').addEventListener('submit', function (e) { e.preventDefault(); loadChannel(); });
   $('download').addEventListener('click', download);
   $('write-card').addEventListener('click', writeCard);
